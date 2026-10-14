@@ -332,19 +332,42 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   </div>
 </div></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script>window.APP_CONFIG={
-  SUPABASE_URL:'YOUR_SUPABASE_URL',          // เช่น https://abcdxyz.supabase.co
-  SUPABASE_ANON_KEY:'YOUR_SUPABASE_ANON_KEY' // anon public key (ปลอดภัยที่จะอยู่ในหน้าเว็บ เพราะมี RLS คุมอยู่)
-};
-</script>
+<script src="config.js"></script>
 <script>/* Replaces the Claude Artifact runtime (window.claude) with Supabase: login + shared "docs" table. */
 (function(){
   var cfg=window.APP_CONFIG||{};
-  var sb=null, ready=null;
-  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  var SKEY='kah_session', session=null, ready=null, listeners=[];
+  function store(v){try{if(v)localStorage.setItem(SKEY,JSON.stringify(v));else localStorage.removeItem(SKEY)}catch(e){}}
+  function load(){try{return JSON.parse(localStorage.getItem(SKEY)||'null')}catch(e){return null}}
+  function hdr(tok){return {'apikey':cfg.SUPABASE_ANON_KEY,'Authorization':'Bearer '+(tok||cfg.SUPABASE_ANON_KEY),'Content-Type':'application/json'}}
+  function toSession(j){return {access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Math.floor(Date.now()/1000)+(j.expires_in||3600),email:(j.user&&j.user.email)||''}}
 
-  function loginUI(){
+  function signIn(email,password){
+    return fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:hdr(),body:JSON.stringify({email:email,password:password})}).then(function(r){
+      return r.json().then(function(j){if(!r.ok||!j.access_token){var e=new Error('bad');e.bad=true;throw e}return toSession(j)})});
+  }
+  function refresh(){
+    if(!session||!session.refresh_token)return Promise.reject(new Error('nosession'));
+    return fetch(cfg.SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:hdr(),body:JSON.stringify({refresh_token:session.refresh_token})}).then(function(r){
+      return r.json().then(function(j){if(!r.ok||!j.access_token){session=null;store(null);throw new Error('expired')}session=toSession(j);if(!session.email)session.email=load()&&load().email||'';store(session);return session})});
+  }
+  function token(){
+    if(session&&session.expires_at-60>Date.now()/1000)return Promise.resolve(session.access_token);
+    return refresh().then(function(s){return s.access_token});
+  }
+  function api(path,opt,retried){
+    opt=opt||{};
+    return token().then(function(t){
+      var h=Object.assign(hdr(t),opt.headers||{});
+      return fetch(cfg.SUPABASE_URL+path,{method:opt.method||'GET',headers:h,body:opt.body})
+    }).then(function(r){
+      if(r.status===401&&!retried){session&&(session.expires_at=0);return api(path,opt,true)}
+      if(!r.ok)return r.text().then(function(t){var j={};try{j=JSON.parse(t)}catch(e){}var e=new Error(j.message||t||('HTTP '+r.status));e.code=j.code||String(r.status);throw e});
+      return r.status===204?null:r.text().then(function(t){return t?JSON.parse(t):null});
+    });
+  }
+
+  function loginUI(msg0){
     return new Promise(function(resolve){
       var o=document.createElement('div');
       o.style.cssText='position:fixed;inset:0;z-index:99999;background:#f3f4f6;display:flex;align-items:center;justify-content:center;padding:16px;font-family:"IBM Plex Sans Thai",system-ui,sans-serif';
@@ -352,34 +375,33 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
         +'<h1 style="margin:0 0 4px;font-size:20px">Key Account Hub</h1><p style="margin:0 0 18px;color:#667;font-size:13px">เข้าสู่ระบบเพื่อใช้งาน</p>'
         +'<label style="font-size:13px">อีเมล<input id="lgE" type="email" required autocomplete="username" style="display:block;width:100%;box-sizing:border-box;margin:4px 0 12px;padding:10px;border:1px solid #cfd3d9;border-radius:6px;font:inherit"></label>'
         +'<label style="font-size:13px">รหัสผ่าน<input id="lgP" type="password" required autocomplete="current-password" style="display:block;width:100%;box-sizing:border-box;margin:4px 0 12px;padding:10px;border:1px solid #cfd3d9;border-radius:6px;font:inherit"></label>'
-        +'<div id="lgM" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:8px"></div>'
+        +'<div id="lgM" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:8px">'+(msg0||'')+'</div>'
         +'<button style="width:100%;padding:10px;border:0;border-radius:6px;background:#0f6f7c;color:#fff;font:inherit;font-weight:500;cursor:pointer">เข้าสู่ระบบ</button></form>';
       document.body.appendChild(o);
       o.querySelector('form').onsubmit=function(e){
         e.preventDefault();var m=o.querySelector('#lgM');m.textContent='';
-        sb.auth.signInWithPassword({email:o.querySelector('#lgE').value.trim(),password:o.querySelector('#lgP').value}).then(function(r){
-          if(r.error){m.textContent='อีเมลหรือรหัสผ่านไม่ถูกต้อง';return}
-          o.remove();resolve(r.data.session);
-        },function(){m.textContent='เชื่อมต่อไม่ได้ ลองอีกครั้ง'});
+        signIn(o.querySelector('#lgE').value.trim(),o.querySelector('#lgP').value).then(function(s){o.remove();resolve(s)},function(err){
+          m.textContent=err&&err.bad?'อีเมลหรือรหัสผ่านไม่ถูกต้อง':'เชื่อมต่อ Supabase ไม่ได้ (อาจถูกบล็อกโดยเครือข่าย หรือใส่ URL ผิด)';
+        });
       };
     });
   }
   function logoutBtn(email){
     var b=document.createElement('button');
-    b.textContent='ออกจากระบบ ('+email+')';
+    b.textContent='ออกจากระบบ'+(email?' ('+email+')':'');
     b.style.cssText='position:fixed;right:10px;bottom:8px;z-index:50;font:12px "IBM Plex Sans Thai",system-ui;padding:4px 10px;border:1px solid #cfd3d9;border-radius:6px;background:#fff;cursor:pointer;opacity:.85';
-    b.onclick=function(){sb.auth.signOut().then(function(){location.reload()})};
+    b.onclick=function(){store(null);location.reload()};
     document.body.appendChild(b);
   }
 
   function init(){
     if(ready)return ready;
     ready=new Promise(function(resolve){
-      if(!cfg.SUPABASE_URL||/YOUR_/.test(cfg.SUPABASE_URL)||!window.supabase){resolve(null);return}
-      sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
-      sb.auth.getSession().then(function(r){return r.data&&r.data.session?r.data.session:loginUI()}).then(function(s){
-        logoutBtn((s&&s.user&&s.user.email)||'');resolve(sb);
-      });
+      if(!cfg.SUPABASE_URL||/YOUR_/.test(cfg.SUPABASE_URL)||!cfg.SUPABASE_ANON_KEY||/YOUR_/.test(cfg.SUPABASE_ANON_KEY)){
+        window.__dbWhy='config';resolve(null);return}
+      session=load();
+      var p=session&&session.expires_at-60>Date.now()/1000?Promise.resolve(session):session?refresh().catch(function(e){return e&&e.message==='expired'?null:(session&&session.access_token?session:null)}):Promise.resolve(null);
+      p.then(function(s){return s||loginUI()}).then(function(s){session=s;store(s);logoutBtn(s.email);resolve(true)});
     });
     return ready;
   }
@@ -387,39 +409,32 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   function fetchAll(name){
     var out=[],step=1000;
     function page(from){
-      return sb.from('docs').select('id,data').eq('collection',name).order('id').range(from,from+step-1).then(function(r){
-        if(r.error)throw r.error;
-        out=out.concat(r.data||[]);
-        return (r.data&&r.data.length===step)?page(from+step):out;
+      return api('/rest/v1/docs?select=id,data&collection=eq.'+encodeURIComponent(name)+'&order=id',{headers:{'Range-Unit':'items','Range':from+'-'+(from+step-1)}}).then(function(rows){
+        rows=rows||[];out=out.concat(rows);
+        return rows.length===step?page(from+step):out;
       });
     }
     return page(0);
   }
   function snapOf(rows){return {docs:rows.map(function(r){return {id:r.id,data:function(){return Object.freeze(Object.assign({},r.data||{}))}}})}}
-  function ok(r){if(r&&r.error)return Promise.reject(r.error);return r}
+  function bump(){setTimeout(function(){listeners.forEach(function(f){f()})},400)}
 
   function collection(name){
     return {
       get:function(){return fetchAll(name).then(snapOf)},
       onSnapshot:function(cb,errCb){
-        var dead=false,timer=null;
-        function load(){fetchAll(name).then(function(rows){if(!dead)cb(snapOf(rows))},function(e){if(!dead&&errCb)errCb(e)})}
-        function soon(){clearTimeout(timer);timer=setTimeout(load,150)}
-        load();
-        var ch=sb.channel('docs-'+name+'-'+Math.random().toString(36).slice(2))
-          .on('postgres_changes',{event:'*',schema:'public',table:'docs'},function(p){
-            var rec=p.new&&p.new.collection?p.new:p.old;
-            if(!rec||!rec.collection||rec.collection===name)soon();
-          }).subscribe();
-        var poll=setInterval(load,60000);
-        return function(){dead=true;clearTimeout(timer);clearInterval(poll);sb.removeChannel(ch)};
+        var dead=false,last=null;
+        function run(){fetchAll(name).then(function(rows){if(dead)return;var sg=JSON.stringify(rows);if(sg===last)return;last=sg;cb(snapOf(rows))},function(e){if(!dead&&errCb&&last===null)errCb(e)})}
+        run();listeners.push(run);
+        var iv=setInterval(function(){if(!document.hidden)run()},8000);
+        return function(){dead=true;clearInterval(iv);listeners=listeners.filter(function(f){return f!==run})};
       },
       doc:function(id){
         id=id||(window.crypto&&crypto.randomUUID?crypto.randomUUID():('d'+Date.now()+Math.random().toString(36).slice(2)));
         return {id:id,
-          set:function(d){return sb.from('docs').upsert({collection:name,id:id,data:d}).then(ok)},
-          update:function(d){return sb.rpc('docs_merge',{c:name,i:id,d:d}).then(ok)},
-          delete:function(){return sb.from('docs').delete().eq('collection',name).eq('id',id).then(ok)}};
+          set:function(d){return api('/rest/v1/docs',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({collection:name,id:id,data:d})}).then(function(){bump()})},
+          update:function(d){return api('/rest/v1/rpc/docs_merge',{method:'POST',body:JSON.stringify({c:name,i:id,d:d})}).then(function(){bump()})},
+          delete:function(){return api('/rest/v1/docs?collection=eq.'+encodeURIComponent(name)+'&id=eq.'+encodeURIComponent(id),{method:'DELETE'}).then(function(){bump()})}};
       }
     };
   }
@@ -436,8 +451,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     if(x==='db')return init().then(function(c){return c?{collection:collection}:null});
     return Promise.resolve(null);
   }};
-  window.__sbClient=function(){return sb};
-})();
+  })();
 </script>
 <script>
 (function(){
