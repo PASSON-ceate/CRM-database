@@ -483,7 +483,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
         {k:'email',l:'Email',min:200,multi:1},{k:'position',l:'ตำแหน่ง',min:170},{k:'dept',l:'แผนก',min:170,multi:1},{k:'note',l:'หมายเหตุ',min:140,multi:1}],
       form:[
         {k:'group',l:'เครือ',list:'dlA'},{k:'province',l:'จังหวัด',list:'dlB'},{k:'company',l:'บริษัท',full:1,req:1},{k:'location',l:'ตึก / โซน / ที่ตั้ง',full:1},
-        {k:'name',l:'รายชื่อ'},{k:'nickname',l:'ชื่อเล่น'},{k:'phone',l:'เบอร์โทร'},{k:'line',l:'Line (ID)'},{k:'email',l:'Email',full:1},
+        {k:'name',l:'รายชื่อ'},{k:'nickname',l:'ชื่อเล่น'},{k:'phone',l:'เบอร์โทร',phones:3},{k:'line',l:'Line (ID)'},{k:'email',l:'Email',full:1},
         {k:'position',l:'ตำแหน่ง'},{k:'dept',l:'แผนก'},{k:'note',l:'หมายเหตุ',full:1,area:2}],
       required:'company'},
     crm:{label:'CRM',short:'CRM',coll:'crm_deals',sort:'dealNo',dir:-1,del:1,
@@ -649,7 +649,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     ['ka','dash','crm','form'].forEach(function(k){
       h+='<button class="nav" type="button" data-tab="'+k+'" title="'+esc(TABS[k].label)+'"'+(k===cur?' aria-current="page"':'')+'><b>'+esc(TABS[k].short)+'</b><small>'+esc(TABS[k].label)+'</small></button>';
     });
-    $('rail').innerHTML=h+'<div class="ver">v55</div>';
+    $('rail').innerHTML=h+'<div class="ver">v56</div>';
   }
 
   function switchTab(k){
@@ -976,7 +976,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   }
   function dbg(){
     var e=$('dbg'); if(!e)return;
-    e.textContent='v55 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
+    e.textContent='v56 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
   }
   function who(e){var t=e.target;return (t&&t.tagName?t.tagName.toLowerCase():'?')+(t&&t.className&&typeof t.className==='string'?'.'+t.className.split(' ')[0]:'')+' '+new Date().toTimeString().slice(0,8)}
   document.addEventListener('pointerdown',function(e){lastDown=who(e);dbg()},true);
