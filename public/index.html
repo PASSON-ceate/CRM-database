@@ -468,7 +468,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     follow:{title:'วันที่ต้องติดตามครั้งถัดไป'}
   };
   var TABS={
-    ka:{label:'Key account',short:'KA',coll:'key_accounts',sort:'createdAt',dir:1,del:1,
+    ka:{label:'Key account',short:'KA',coll:'key_accounts',sort:'createdAt',dir:1,groupBy:'group',del:1,
       filters:[{k:'group',all:'ทุกเครือ'},{k:'province',all:'ทุกจังหวัด'}],
       cols:[
         {k:'group',l:'เครือ',tag:1,logo:1},{k:'company',l:'บริษัท',min:240,strong:1},{k:'province',l:'จังหวัด'},{k:'location',l:'ตึก / โซน / ที่ตั้ง',min:150},
@@ -642,7 +642,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     ['ka','dash','crm','form'].forEach(function(k){
       h+='<button class="nav" type="button" data-tab="'+k+'" title="'+esc(TABS[k].label)+'"'+(k===cur?' aria-current="page"':'')+'><b>'+esc(TABS[k].short)+'</b><small>'+esc(TABS[k].label)+'</small></button>';
     });
-    $('rail').innerHTML=h+'<div class="ver">v50</div>';
+    $('rail').innerHTML=h+'<div class="ver">v51</div>';
   }
 
   function switchTab(k){
@@ -940,6 +940,17 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   /* ---- data helpers: the table updates at once on every save, the database confirms afterwards ---- */
   function sortAll(k){
     var T=TABS[k];
+    if(T.groupBy){
+      /* keep every เครือ together: groups in order of their oldest row, rows inside a group oldest first */
+      var first={},g=T.groupBy;
+      S[k].all.forEach(function(r){var n=String(r[g]||'').trim(),t=+r[T.sort]||0;if(!(n in first)||t<first[n])first[n]=t});
+      S[k].all.sort(function(a,b){
+        var ga=String(a[g]||'').trim(),gb=String(b[g]||'').trim();
+        if(ga!==gb)return (first[ga]-first[gb])||ga.localeCompare(gb);
+        return T.dir*((+a[T.sort]||0)-(+b[T.sort]||0))||String(a.id).localeCompare(String(b.id));
+      });
+      return;
+    }
     S[k].all.sort(function(a,b){
       var x=a[T.sort],y=b[T.sort];
       if(typeof x==='number'||typeof y==='number') return T.dir*((x||0)-(y||0));
@@ -960,7 +971,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   }
   function dbg(){
     var e=$('dbg'); if(!e)return;
-    e.textContent='v50 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
+    e.textContent='v51 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
   }
   function who(e){var t=e.target;return (t&&t.tagName?t.tagName.toLowerCase():'?')+(t&&t.className&&typeof t.className==='string'?'.'+t.className.split(' ')[0]:'')+' '+new Date().toTimeString().slice(0,8)}
   document.addEventListener('pointerdown',function(e){lastDown=who(e);dbg()},true);
