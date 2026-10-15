@@ -305,6 +305,10 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
           <table class="pleg"><thead><tr><th></th><th>สถานะ</th><th>ดีล</th><th>สัดส่วน</th></tr></thead><tbody id="dPieLeg"></tbody></table>
         </div>
         <div id="dPieEmpty" class="empty" hidden>ยังไม่มีดีลในสถานะเหล่านี้</div>
+        <div id="dLoseWrap" style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px" hidden>
+          <h3 style="margin:0 0 10px;font-size:14px">สาเหตุที่ไม่ได้งาน (สถานะ Lose)</h3>
+          <div style="overflow:auto"><table class="dl"><thead><tr><th>DEAL No.</th><th>บริษัท / ชื่อ</th><th>มูลค่าประมาณ</th><th>สาเหตุที่ไม่ได้งาน</th></tr></thead><tbody id="dLose"></tbody></table></div>
+        </div>
         <div id="dTyWrap" style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px">
           <h3 style="margin:0 0 10px;font-size:14px">สัดส่วน END USER / DEALER</h3>
           <div class="pie">
@@ -642,7 +646,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     ['ka','dash','crm','form'].forEach(function(k){
       h+='<button class="nav" type="button" data-tab="'+k+'" title="'+esc(TABS[k].label)+'"'+(k===cur?' aria-current="page"':'')+'><b>'+esc(TABS[k].short)+'</b><small>'+esc(TABS[k].label)+'</small></button>';
     });
-    $('rail').innerHTML=h+'<div class="ver">v51</div>';
+    $('rail').innerHTML=h+'<div class="ver">v53</div>';
   }
 
   function switchTab(k){
@@ -971,7 +975,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   }
   function dbg(){
     var e=$('dbg'); if(!e)return;
-    e.textContent='v51 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
+    e.textContent='v53 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
   }
   function who(e){var t=e.target;return (t&&t.tagName?t.tagName.toLowerCase():'?')+(t&&t.className&&typeof t.className==='string'?'.'+t.className.split(' ')[0]:'')+' '+new Date().toTimeString().slice(0,8)}
   document.addEventListener('pointerdown',function(e){lastDown=who(e);dbg()},true);
@@ -1155,13 +1159,13 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   $('dPieYear').onchange=function(){pieYear=this.value;renderPie()};
   function showDeals(st){
     var rs=pieRows().filter(function(r){return r.status===st}).sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''))||String(b.dealNo||'').localeCompare(String(a.dealNo||''))});
-    var win=st==='Win';
+    var win=st==='Win',lose=st==='Lose';
     pop={tab:'crm',id:null,kind:'dealist'};
     $('pop').querySelector('.card').classList.add('wide');
     $('pTitle').textContent='สถานะ '+st;
     $('pSub').textContent=(pieYear==='all'?'ทุกปี':'ปี '+pieYear)+' · '+rs.length+' ดีล';
     $('pBody').className='pb';
-    $('pBody').innerHTML=rs.length?'<div style="overflow:auto"><table class="dl"><thead><tr><th>DEAL No.</th><th>วันที่</th><th>บริษัท / ชื่อ</th><th>ประเภท</th><th>มูลค่าประมาณ</th>'+(win?'<th>มูลค่าขายจริง</th>':'')+'</tr></thead><tbody>'+rs.map(function(r){return '<tr><td class="mono nowrap">'+esc(r.dealNo||'')+'</td><td class="nowrap">'+esc(fmtDate(r.date))+'</td><td>'+dName(r)+'</td><td>'+esc(r.type||'')+'</td><td class="nowrap">'+dVal(r)+'</td>'+(win?'<td class="nowrap">'+(r.poValue?esc(fmtNum(r.poValue)):'<span class="mut">-</span>')+'</td>':'')+'</tr>'}).join('')+'</tbody></table></div>':'<div class="mut">ไม่มีดีลในสถานะนี้'+(pieYear==='all'?'':' ของปี '+pieYear)+'</div>';
+    $('pBody').innerHTML=rs.length?'<div style="overflow:auto"><table class="dl"><thead><tr><th>DEAL No.</th><th>วันที่</th><th>บริษัท / ชื่อ</th><th>ประเภท</th><th>มูลค่าประมาณ</th>'+(win?'<th>มูลค่าขายจริง</th>':'')+(lose?'<th>สาเหตุที่ไม่ได้งาน</th>':'')+'</tr></thead><tbody>'+rs.map(function(r){return '<tr><td class="mono nowrap">'+esc(r.dealNo||'')+'</td><td class="nowrap">'+esc(fmtDate(r.date))+'</td><td>'+dName(r)+'</td><td>'+esc(r.type||'')+'</td><td class="nowrap">'+dVal(r)+'</td>'+(win?'<td class="nowrap">'+(r.poValue?esc(fmtNum(r.poValue)):'<span class="mut">-</span>')+'</td>':'')+(lose?'<td style="min-width:200px">'+(r.poReason?esc(r.poReason):'<span class="mut">-</span>')+'</td>':'')+'</tr>'}).join('')+'</tbody></table></div>':'<div class="mut">ไม่มีดีลในสถานะนี้'+(pieYear==='all'?'':' ของปี '+pieYear)+'</div>';
     $('pAdd').hidden=true;$('pSave').hidden=true;$('pDel').hidden=true;$('pClose').textContent='ปิด';
     $('pop').showModal();
   }
@@ -1177,6 +1181,9 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     $('dPieEmpty').hidden=!(S.crm.loaded&&!tot);$('dPie').parentNode.hidden=!tot;
     $('dPieNote').textContent=tot?'จากดีล '+tot+' ดีลใน 7 สถานะ · กดที่สถานะเพื่อดูรายการดีล':'';
     $('dTyWrap').hidden=!tot;
+    var lr=rows.filter(function(r){return r.status==='Lose'}).sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''))||String(b.dealNo||'').localeCompare(String(a.dealNo||''))});
+    $('dLoseWrap').hidden=!lr.length;
+    $('dLose').innerHTML=lr.map(function(r){return '<tr><td class="mono nowrap">'+esc(r.dealNo||'')+'</td><td>'+dName(r)+'</td><td class="nowrap">'+dVal(r)+'</td><td style="min-width:200px">'+(r.poReason?esc(r.poReason):'<span class="mut">-</span>')+'</td></tr>'}).join('');
     if(!tot){$('dPie').innerHTML='';$('dPieLeg').innerHTML='';$('dPie2').innerHTML='';$('dPie2Leg').innerHTML='';return}
     PIE.forEach(function(p,i){
       if(!cnt[i])return;
