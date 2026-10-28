@@ -159,6 +159,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
 .mf{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
 .mf .sp{margin-right:auto}
 .mut{color:var(--muted);font-size:12px;font-weight:400}
+.sumbar{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;padding:10px 14px;margin:0 0 10px;background:var(--surface);border:1px solid var(--line);border-radius:8px;font-variant-numeric:tabular-nums}.sumbar b{font-size:18px}td.num{text-align:right;font-variant-numeric:tabular-nums}th.num{text-align:right}
 .dbg{font-family:var(--mono);font-size:11px;color:var(--muted);overflow-wrap:anywhere}
 .pb{padding:16px 20px;overflow:auto;display:flex;flex-direction:column;gap:12px}
 .pb,.mb{flex:1;min-height:0}
@@ -238,6 +239,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
       <button class="btn primary" id="add" type="button">+ เพิ่มข้อมูล</button>
     </div>
 
+    <div id="sumbar" class="sumbar" hidden></div>
     <div class="tablewrap">
       <table>
         <thead><tr id="thead"></tr></thead>
@@ -508,7 +510,11 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     form:{label:'Form',short:'Form',coll:'quote_forms',sort:'createdAt',dir:-1,view:'form',
       filters:[{k:'name',all:''},{k:'company',all:''}],cols:[],form:[]},
     dash:{label:'Dashboard',short:'Dash',coll:'dash_todos',sort:'createdAt',dir:1,view:'dash',
-      filters:[{k:'name',all:''},{k:'company',all:''}],cols:[],form:[]}
+      filters:[{k:'name',all:''},{k:'company',all:''}],cols:[],form:[]},
+    exp:{label:'Expense',short:'Exp',coll:'expenses',sort:'date',dir:-1,del:1,sum:'amount',
+      filters:[],
+      cols:[{k:'date',l:'วันที่',date:1,nowrap:1,min:140},{k:'amount',l:'ราคา (บาท)',num:1,nowrap:1,min:160}],
+      form:[{k:'date',l:'วันที่',type:'date'},{k:'amount',l:'ราคา'}]}
   };
   var $=function(id){return document.getElementById(id)};
   /* Modal windows are plain overlays (no <dialog>), so they work in every browser and embed. */
@@ -529,7 +535,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   // colour of each group badge: [colour 1, colour 2 (mixed), text colour for a solid badge]
   var GROUPC={'3k battery':['#f5c400','#1b1b1b'],'ไทยยูเนี่ยน':['#f28a1a','#1b3a8a'],'บุญรอด':['#fff1a8',null,'#6a5200'],'ปตท':['#3ea6e8','#d83a3a'],'fb battery':['#2f9e57','#1b1b1b'],'gs battery':['#1f4fbf',null,'#ffffff']};
   var logos={};   // group name -> logo (data URI), kept in the group_logos collection
-  var cur=(location.hash==='#crm')?'crm':(location.hash==='#form')?'form':(location.hash==='#dash')?'dash':'ka';
+  var cur=(location.hash==='#crm')?'crm':(location.hash==='#form')?'form':(location.hash==='#dash')?'dash':(location.hash==='#exp')?'exp':'ka';
   var editing=null, confirmDel=false, armedId=null, armTimer=null, renders=0, snaps=0, lastHtml=null, lastDown='-', lastClick='-', lastSig={};
 
   function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML}
@@ -564,7 +570,9 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   function setupFilters(){
     var T=TABS[cur],st=S[cur];
     ['f1','f2'].forEach(function(id,i){
-      var f=T.filters[i],sel=$(id),vals=opts(cur,f),v=st.filt[i]||'';
+      var f=T.filters[i],sel=$(id);
+      sel.hidden=!f;if(!f)return;
+      var vals=opts(cur,f),v=st.filt[i]||'';
       sel.innerHTML='<option value="">'+f.all+'</option>'+vals.map(function(x){return '<option>'+esc(x)+'</option>'}).join('');
       sel.value=vals.indexOf(v)>-1?v:'';
     });
@@ -602,6 +610,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
       return '<td>'+(gc[1]?'<span class="tag gmix" style="background:linear-gradient(110deg,'+gc[0]+' 50%,'+gc[1]+' 50%)"><span>'+esc(v)+'</span></span>':'<span class="tag" style="background:'+gc[0]+';color:'+gc[2]+'">'+esc(v)+'</span>')+'</td>'}
     if(c.tag) inner=v?'<span class="tag ty-'+esc(v.toLowerCase().replace(/[^a-z]/g,''))+'">'+esc(v)+'</span>':'';
     else if(c.status){return '<td><button type="button" class="tag stbtn'+(v?' st-'+esc(v.toLowerCase().replace(/[^a-z]/g,'')):' stempty')+'" data-st="1" aria-haspopup="listbox">'+esc(v||'เลือกสถานะ')+' <span aria-hidden="true">▾</span></button></td>'}
+    else if(c.num){inner=v===''?'':esc(fmtNum(v));cls.push('num')}
     else if(c.date) inner=esc(fmtDate(v));
     else if(c.clamp) inner='<div class="clamp">'+esc(v)+'</div>';
     else inner=esc(v);
@@ -616,7 +625,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     var q=$('q').value.trim().toLowerCase();
     var list=st.all.filter(function(r){
       if(cur==='crm'&&rowYear(r)!==curYear)return false;
-      for(var i=0;i<2;i++){var v=st.filt[i];if(v&&r[T.filters[i].k]!==v)return false}
+      for(var i=0;i<T.filters.length;i++){var v=st.filt[i];if(v&&r[T.filters[i].k]!==v)return false}
       if(!q)return true;
       var keys=T.cols.map(function(c){return c.k}).concat(T.searchExtra||[]);
       var txt=keys.map(function(k){return r[k]||''}).join(' ');
@@ -628,6 +637,8 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
         T.cols.map(function(c){return cell(c,r)}).join('')+
         (T.del?'<td class="ed"><button type="button" class="btn sm danger" data-pop="delete" aria-label="ลบแถวนี้">ลบ</button></td>':'')+'</tr>';
     }).join('');
+    var sb=$('sumbar');
+    if(T.sum){var tot=0;list.forEach(function(r){tot+=Number(r[T.sum])||0});sb.hidden=false;sb.innerHTML='<span>จำนวน '+list.length+' รายการ</span><span>รวมทั้งหมด <b>'+esc(fmtNum(Math.round(tot*100)/100))+'</b> บาท</span>'}else sb.hidden=true;
     renders++;
     if(html!==lastHtml){lastHtml=html;$('rows').innerHTML=html}
     var e=$('empty');
@@ -641,15 +652,15 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
 
   function buildHead(){
     var T=TABS[cur];
-    $('thead').innerHTML='<th></th>'+T.cols.map(function(c){return '<th'+(c.min?' style="min-width:'+c.min+'px"':'')+'>'+esc(c.l)+'</th>'}).join('')+(T.del?'<th></th>':'');
+    $('thead').innerHTML='<th></th>'+T.cols.map(function(c){return '<th'+(c.num?' class="num"':'')+(c.min?' style="min-width:'+c.min+'px"':'')+'>'+esc(c.l)+'</th>'}).join('')+(T.del?'<th></th>':'');
   }
 
   function buildRail(){
     var h='<div class="brand">ENTECH</div>';
-    ['ka','dash','crm','form'].forEach(function(k){
+    ['ka','dash','crm','form','exp'].forEach(function(k){
       h+='<button class="nav" type="button" data-tab="'+k+'" title="'+esc(TABS[k].label)+'"'+(k===cur?' aria-current="page"':'')+'><b>'+esc(TABS[k].short)+'</b><small>'+esc(TABS[k].label)+'</small></button>';
     });
-    $('rail').innerHTML=h+'<div class="ver">v56</div>';
+    $('rail').innerHTML=h+'<div class="ver">v57</div>';
   }
 
   function switchTab(k){
@@ -683,8 +694,8 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     }
     if(f.select) return lab+'<select id="'+id+'"><option value=""></option>'+(v&&f.select.indexOf(v)<0?[v]:[]).concat(f.select).map(function(o){return '<option'+(o===v?' selected':'')+'>'+esc(o)+'</option>'}).join('')+'</select></label>';
     if(f.area) return lab+'<textarea id="'+id+'" rows="'+f.area+'">'+esc(v)+'</textarea></label>';
-    if(f.k==='salesValue'&&v)v=fmtNum(v);
-    return lab+'<input id="'+id+'" type="'+(f.type||'text')+'"'+(f.k==='salesValue'?' inputmode="decimal"':'')+''+(f.list?' list="'+f.list+'" autocomplete="off"':'')+' value="'+esc(v)+'"></label>';
+    if((f.k==='salesValue'||f.k==='amount')&&v)v=fmtNum(v);
+    return lab+'<input id="'+id+'" type="'+(f.type||'text')+'"'+((f.k==='salesValue'||f.k==='amount')?' inputmode="decimal"':'')+''+(f.list?' list="'+f.list+'" autocomplete="off"':'')+' value="'+esc(v)+'"></label>';
   }
   var MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
   function drawCal(){
@@ -728,7 +739,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     var n=0,np=0;while(np<out.length&&n<before){if(/[\d.]/.test(out[np]))n++;np++}
     try{el.setSelectionRange(np,np)}catch(e){}
   }
-  $('pBody').addEventListener('input',function(e){var t=e.target;if(t&&(t.id==='qVal'||t.id==='i_salesValue'))commaFmt(t)});
+  $('pBody').addEventListener('input',function(e){var t=e.target;if(t&&(t.id==='qVal'||t.id==='i_salesValue'||t.id==='i_amount'))commaFmt(t)});
   function commaFmt(t){
     t=String(t).replace(/[^\d.]/g,'');var i=t.indexOf('.');
     var ip=i<0?t:t.slice(0,i),fp=i<0?'':'.'+t.slice(i+1).replace(/\./g,'');
@@ -736,7 +747,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     return ip+fp;
   }
   $('pBody').addEventListener('input',function(e){
-    var el=e.target;if(!el||(el.id!=='qVal'&&el.id!=='i_salesValue'&&el.id!=='i_poValue'))return;
+    var el=e.target;if(!el||(el.id!=='qVal'&&el.id!=='i_salesValue'&&el.id!=='i_poValue'&&el.id!=='i_amount'))return;
     var before=el.value.slice(0,el.selectionStart==null?el.value.length:el.selectionStart).replace(/[^\d.]/g,'').length;
     var f=commaFmt(el.value);el.value=f;
     var pos=0,cnt=0;while(pos<f.length&&cnt<before){if(/[\d.]/.test(f[pos]))cnt++;pos++}
@@ -759,7 +770,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     $('pSub').textContent=r?[r.dealNo,r.name,r.company].filter(Boolean).join(' · '):'';
     $('pBody').className=(isLog||kind==='quote'||kind==='follow')?'pb':'mb';
     if(kind==='delete'){
-      var tel=r.phone||r.tel,sum=[r.dealNo,r.group,r.company,r.name,r.nickname,tel&&String(tel).split('\n')[0]].filter(Boolean).map(esc).join(' · ');
+      var tel=r.phone||r.tel,sum=[cur==='exp'?fmtDate(r.date):'',cur==='exp'&&r.amount?fmtNum(r.amount)+' บาท':'',r.dealNo,r.group,r.company,r.name,r.nickname,tel&&String(tel).split('\n')[0]].filter(Boolean).map(esc).join(' · ');
       h='<div>ต้องการลบข้อมูลแถวนี้ออกถาวรใช่หรือไม่? การลบไม่สามารถกู้คืนได้</div><div class="kv"><div class="k">แถวที่จะลบ</div><div class="v">'+(sum||'(ไม่มีข้อมูล)')+'</div></div>';
       $('pBody').className='pb'; $('pBody').innerHTML=h; $('pSub').textContent='';
       $('pAdd').hidden=true; $('pSave').hidden=true; $('pDel').hidden=false; $('pClose').textContent='ยกเลิก';
@@ -785,9 +796,10 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
     $('pBody').innerHTML=h;
     if(kind==='edit'&&cur==='ka')lPreview();
     if(kind==='follow')drawCal();
-    ['i_salesValue','i_poValue'].forEach(function(i){var el=$(i);if(el&&el.value)el.value=commaFmt(el.value)});
+    ['i_salesValue','i_poValue','i_amount'].forEach(function(i){var el=$(i);if(el&&el.value)el.value=commaFmt(el.value)});
     $('dlA').innerHTML=cur==='ka'?uniq('ka','group').map(function(v){return '<option value="'+esc(v)+'">'}).join(''):'';
     $('dlB').innerHTML=cur==='ka'?uniq('ka','province').map(function(v){return '<option value="'+esc(v)+'">'}).join(''):'';
+    if(kind==='edit'&&!r&&cur==='exp'){var tn=new Date();$('i_date').value=tn.getFullYear()+'-'+p2(tn.getMonth()+1)+'-'+p2(tn.getDate())}
     if(kind==='edit'&&!r&&cur==='crm'){$('i_dealNo').value=nextDealNo();$('i_date').value=defaultDate();$('i_status').value='In progress'}
     $('pAdd').hidden=!(isLog||kind==='quote');
     $('pSave').disabled=!(kind==='edit'&&!r);   // enabled once something changes (a new row is ready to save)
@@ -887,7 +899,11 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
       defs.forEach(function(f){
         if(f.phones){var a=[];for(var i=0;i<f.phones;i++){var s=$('i_'+f.k+'_'+i).value.trim();if(s)a.push(s)}data[f.k]=a.join('\n')}
         else data[f.k]=$('i_'+f.k).value.trim()});
-      var nvk=['salesValue','poValue'];for(var ni=0;ni<nvk.length;ni++){if(nvk[ni] in data){var nv=normNum(data[nvk[ni]]);if(nv===null){toast('มูลค่าต้องเป็นตัวเลข');return}data[nvk[ni]]=nv}}
+      var nvk=['salesValue','poValue','amount'];for(var ni=0;ni<nvk.length;ni++){if(nvk[ni] in data){var nv=normNum(data[nvk[ni]]);if(nv===null){toast('มูลค่าต้องเป็นตัวเลข');return}data[nvk[ni]]=nv}}
+      if(kind==='edit'&&k==='exp'){
+        if(!data.date){toast('กรุณาเลือกวันที่');return}
+        if(!data.amount){toast('กรุณากรอกราคา');return}
+      }
       if(kind==='edit'&&!pop.id&&!Object.keys(data).some(function(x){return data[x]})){toast('กรุณากรอกข้อมูลอย่างน้อย 1 ช่อง');return}
       if(kind==='edit'&&k==='crm'&&!data.date)data.date=pop.id&&r&&r.date?r.date:defaultDate();
       if(kind==='edit'&&k==='crm'&&rowYear(data)!==curYear)moved=rowYear(data);
@@ -976,7 +992,7 @@ form{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
   }
   function dbg(){
     var e=$('dbg'); if(!e)return;
-    e.textContent='v56 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
+    e.textContent='v57 · แถว '+S[cur].all.length+' · วาดตาราง '+renders+' · รับข้อมูล '+snaps+' · กดล่าสุด: '+lastClick+' · เริ่มกด: '+lastDown;
   }
   function who(e){var t=e.target;return (t&&t.tagName?t.tagName.toLowerCase():'?')+(t&&t.className&&typeof t.className==='string'?'.'+t.className.split(' ')[0]:'')+' '+new Date().toTimeString().slice(0,8)}
   document.addEventListener('pointerdown',function(e){lastDown=who(e);dbg()},true);
